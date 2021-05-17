@@ -1,0 +1,100 @@
+package com.fcmb.securecode.interswitch;
+
+import java.text.SimpleDateFormat;
+
+import com.fcmb.securecode.connection.Datasource;
+import com.fcmb.securecode.pojo.MyUserInfo;
+import com.fcmb.securecode.query.SqlCriteria;
+import com.fcmb.securecode.repository.ProcessCSV;
+import com.fcmb.securecode.utility.CryptoUtil;
+import com.fcmb.securecode.utility.MyLog;
+import com.jcraft.jsch.*;
+
+public class SecurecodeFTP {	
+	 String ErrorLogger;    
+	    SimpleDateFormat dateFormat = new SimpleDateFormat("dd_MM_yyyy");
+	    java.util.Date date = new java.util.Date();
+	    private String LoggerLocation = SqlCriteria.ErrorLogPath()+"log_" + dateFormat.format(date) + ".txt";
+	    MyLog sc = new MyLog();
+
+	    private static final int REMOTE_PORT = 22;
+	    private static final int SESSION_TIMEOUT = 30000;
+	    private static final int CHANNEL_TIMEOUT = 5000;
+
+	    public void FTPUpload(String filePath) {
+	    	 
+	        String localFile = filePath;
+	        String remoteFile ="SecureCode"; 
+
+	        Session jschSession = null;
+
+            Session session = null;
+            CryptoUtil crypt = new CryptoUtil();
+	        try {
+	            JSch jsch = new JSch();
+
+	            java.util.Properties config = new java.util.Properties(); 
+	           
+	            String REMOTE_USERNAME = crypt.decrypt(Datasource.REMOTE_USERNAME);
+	            String REMOTE_HOST = crypt.decrypt(Datasource.REMOTE_HOST);
+	            
+                session = jsch.getSession(REMOTE_USERNAME, REMOTE_HOST, REMOTE_PORT); //default port is 22
+                UserInfo ui = new MyUserInfo();
+                session.setUserInfo(ui);
+                session.setPassword(Datasource.REMOTE_PASSWORD.getBytes());
+                config.put("StrictHostKeyChecking", "no");
+	            session.setConfig(config);
+                session.connect();
+                Channel sftp  = session.openChannel("sftp");
+                sftp.connect();
+
+                System.out.println("Connected");
+                ChannelSftp channelSftp = (ChannelSftp) sftp;
+                IsFileExist(channelSftp,remoteFile);               
+               
+                
+                channelSftp.put(localFile, remoteFile);
+
+                System.out.println("Uploaded file successfully.");
+                
+	                
+	            } catch (JSchException e) {
+	                e.printStackTrace(System.out);
+	                ErrorLogger = new java.util.Date() + "Class:SecurecodeFTP|Method:FTPUpload| File Error: " +e;
+	                sc.FileLogger(LoggerLocation, ErrorLogger);
+	            } catch (Exception e){
+	                e.printStackTrace(System.out);
+	                ErrorLogger = new java.util.Date() + "Class:SecurecodeFTP|Method:FTPUpload| File Error: " +e;
+	                sc.FileLogger(LoggerLocation, ErrorLogger);
+	            } finally{
+	                session.disconnect();
+	                System.out.println("Disconnected");
+	            }
+	        
+	        System.out.println("Done");
+	        
+	    }
+	    private void IsFileExist(ChannelSftp channelSftp1,String dir1) throws SftpException{
+	    	ChannelSftp channelSftp = channelSftp1;
+	    	String currentDirectory=channelSftp.pwd();
+	    	String dir=dir1;
+	    	SftpATTRS attrs=null;
+	    	try {
+	    	    attrs = channelSftp.stat(currentDirectory+dir);
+	    	} catch (Exception e) {
+	    	    System.out.println(currentDirectory+" not found");
+	    	}
+
+	    	if (attrs != null) {
+	    	    //System.out.println("Directory exists IsDir="+attrs.isDir());
+	    	} else {
+	    	    System.out.println("Creating dir "+dir);
+	    	    channelSftp.mkdir(dir);
+	    	}
+	    }
+}
+	    
+
+	
+
+
